@@ -1,3 +1,5 @@
+os: linux
+
 sudo: required
 
 language: c
@@ -5,62 +7,35 @@ language: c
 git:
   depth: false
 
+branches: master
+
 services:
   - docker
-stages:
-  - test
-  - qemutest
 
 before_install:
   - docker pull thesofproject/sof && docker tag thesofproject/sof sof
 
-env:
-  - PLATFORM=byt
-  - PLATFORM=cht
-  - PLATFORM=bdw
-  - PLATFORM=hsw
-  - PLATFORM=apl
-  - PLATFORM=skl
-  - PLATFORM=kbl
-  - PLATFORM=cnl
-  - PLATFORM=sue
-  - PLATFORM=icl
-  - PLATFORM=jsl
-  - PLATFORM=imx8
-  - PLATFORM=imx8x
+script:
+  - SOF_DESC=$(git describe --tag)
+  - SOF_TAG=${SOF_DESC%-*}
+  - SOF_VER=${SOF_TAG#v}
+  - SOF_REL=sof-imx-${SOF_VER}
+  - export TRAVIS_TAG=${SOF_TAG}
+  - install -d ./${SOF_REL}/{sof,sof-tplg}
+  - ./scripts/docker-run.sh ./scripts/xtensa-build-all.sh -j imx8
+  - ./scripts/docker-run.sh ./scripts/xtensa-build-all.sh -j imx8x
+  - ./scripts/docker-run.sh ./scripts/build-tools.sh
+  - cp -v ./LICENCE ./${SOF_REL}/sof/
+  - cp -v ./build_imx*_gcc/sof-imx* ./${SOF_REL}/sof/
+  - cp -v ./tools/build_tools/topology/sof-imx* ./${SOF_REL}/sof-tplg/
+  - tar czvf ${SOF_REL}.tar.gz ${SOF_REL}
 
-script: ./scripts/docker-run.sh ./scripts/xtensa-build-all.sh -j $PLATFORM
-
-jobs:
-  include:
-    - stage: test
-      script: ./scripts/docker-run.sh ./scripts/build-tools.sh
-      env: PLATFORM=tools
-      # Matrix hack: Declare the same stage name multiple times to test multiple
-      # versions. Use a YAML alias to prevent redundancy.
-    - &qemuboottest
-      stage: qemutest
-      script:
-        - sed -i $(($(grep "config HAVE_AGENT" -n src/platform/Kconfig | cut -f1 -d:)+2))"s/default y/default n/" src/platform/Kconfig
-        - ./scripts/docker-run.sh ./scripts/xtensa-build-all.sh -r -j $PLATFORM
-        - ./scripts/docker-qemu.sh ../sof.git/scripts/qemu-check.sh $PLATFORM
-      env: PLATFORM=byt
-      before_install:
-        - docker pull thesofproject/sof && docker tag thesofproject/sof sof
-        - docker pull thesofproject/sofqemu && docker tag thesofproject/sofqemu sofqemu
-    - <<: *qemuboottest
-      env: PLATFORM=cht
-    - <<: *qemuboottest
-      env: PLATFORM=bdw
-    - <<: *qemuboottest
-      env: PLATFORM=hsw
-    - <<: *qemuboottest
-      env: PLATFORM=apl
-    - <<: *qemuboottest
-      env: PLATFORM=skl
-    - <<: *qemuboottest
-      env: PLATFORM=kbl
-    - <<: *qemuboottest
-      env: PLATFORM=cnl
-    - <<: *qemuboottest
-      env: PLATFORM=icl
+deploy:
+  provider: releases
+  token: ${GITHUB_TOKEN}
+  skip_cleanup: true
+  prerelease: true
+  on:
+    tags: true
+  file: ${SOF_REL}.tar.gz
+  name: ${SOF_REL}
