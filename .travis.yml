@@ -17,7 +17,7 @@ before_install:
 
 script:
   - SOF_DESC=$(git describe --tag)
-  - SOF_TAG=${SOF_DESC%-*}
+  - SOF_TAG=${SOF_DESC%-g*}
   - SOF_VER=${SOF_TAG#v}
   - SOF_REL=sof-imx-${SOF_VER}
   - export TRAVIS_TAG=${SOF_TAG}
